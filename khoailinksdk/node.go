@@ -1,10 +1,5 @@
 package khoailinksdk
 
-type Option func(*nodeOptions)
-type nodeOptions struct {
-	configPath string
-}
-
 func Start(ip string, opts ...Option) error {
 	options := &nodeOptions{
 		configPath: "",
