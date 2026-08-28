@@ -3,6 +3,7 @@ package khoailinksdk
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,6 +12,8 @@ import (
 	"khoai-link-sdk/client"
 	"khoai-link-sdk/engine"
 	"khoai-link-sdk/server"
+
+	"github.com/khoai-link-protocol/core"
 )
 
 func Start(addr string, opts ...Option) error {
@@ -44,6 +47,7 @@ func Start(addr string, opts ...Option) error {
 			serverErrChan <- err
 		}
 	}()
+	log.Println("start node", cfg.NodeID, "at addr", addr)
 
 	// Cho 50-100ms de port TCP thuc su san sang truoc khi bao len MCP
 	time.Sleep(100 * time.Millisecond)
@@ -52,7 +56,16 @@ func Start(addr string, opts ...Option) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if _, err := mcpCli.MCPRegister(ctx, cfg); err != nil {
+	cap := core.Capability{
+		ID:       cfg.NodeID,
+		Name:     cfg.NodeName, // hoac gan cfg.Name neu config co truong name
+		IP:       addr,         // gan IP bang dia chi addr cua Node
+		Tasks:    cfg.Tasks,
+		Metadata: cfg.Metadata,
+	}
+
+	// Gui Capability sang MCP Gateway
+	if _, err := mcpCli.MCPRegister(ctx, cap); err != nil {
 		return fmt.Errorf("failed to register node with mcp gateway: %w", err)
 	}
 

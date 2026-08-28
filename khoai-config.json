@@ -1,6 +1,6 @@
 {
   "node_id": "node-qc-station-01",
-  "mcp_gateway_url": "http://192.168.1.10:9090",
+  "mcp_gateway_url": "http://localhost:8080",
   "tasks": [
     {
       "name": "inspect_lot_quality",

@@ -12,6 +12,7 @@ import (
 
 // Config chứa toàn bộ thông số cấu hình của một Node
 type Config struct {
+	NodeName      string                `json:"node_name"`
 	NodeID        string                `json:"node_id"`
 	MCPGatewayURL string                `json:"mcp_gateway_url"`
 	Tasks         []core.TaskDefinition `json:"tasks"`
