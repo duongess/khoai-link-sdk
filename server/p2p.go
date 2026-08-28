@@ -3,10 +3,13 @@ package server
 import (
 	"context"
 	"errors"
-	"khoai-link-sdk/engine"
 	"net/http"
 	"sync"
 	"time"
+
+	"khoai-link-sdk/engine"
+
+	"github.com/khoai-link-protocol/core"
 )
 
 type P2pNode struct {
@@ -18,18 +21,19 @@ type P2pNode struct {
 	httpServer    *http.Server
 }
 
-func NewP2pNode(addr, mcpGatewayURL string) *P2pNode {
+func NewP2pNode(addr, mcpGatewayURL string, exec *engine.Executor) *P2pNode {
 	return &P2pNode{
 		Addr:          addr,
 		MCPGatewayURL: mcpGatewayURL,
+		Engine:        exec,
 		Peers:         make(map[string]string),
 	}
 }
 
-// Request payload mau cho endpoint execute
-type ExecuteTaskRequest struct {
-	TaskName string         `json:"task_name"`
-	Inputs   map[string]any `json:"inputs"`
+type ExecuteRequestPayload struct {
+	ExecutionPlan  *core.ExecutionPlan       `json:"execution_plan"`
+	CurrentStepID  string                    `json:"current_step_id,omitempty"`
+	RuntimeOutputs map[string]map[string]any `json:"runtime_outputs,omitempty"`
 }
 
 func (s *P2pNode) setupRoutes() *Router {
@@ -48,16 +52,24 @@ func (s *P2pNode) setupRoutes() *Router {
 	})
 
 	// 3. Task execution endpoint (POST)
-	RegisterPOST(rt, "/api/v1/execute", func(c *Context[ExecuteTaskRequest]) (any, int, error) {
-		if c.Body.TaskName == "" {
-			return nil, http.StatusBadRequest, errors.New("task_name is required")
+	RegisterPOST(rt, "/api/v1/execute", func(c *Context[ExecuteRequestPayload]) (any, int, error) {
+		if c.Body.ExecutionPlan == nil {
+			return nil, http.StatusBadRequest, errors.New("execution_plan is required")
 		}
 
-		// Goi logic thuc thi task o day
-		result := map[string]any{
-			"task":   c.Body.TaskName,
-			"status": "completed",
+		// Khong gan cung Nodes[0] o day nua.
+		// Truyen truc tiep CurrentStepID (co the rong neu la Gateway goi khoi tao) vao Engine
+		result, err := s.Engine.ExecuteAndDispatch(
+			c.Req.Context(),
+			c.RequestID,
+			c.Body.ExecutionPlan,
+			c.Body.CurrentStepID,
+			c.Body.RuntimeOutputs,
+		)
+		if err != nil {
+			return nil, http.StatusInternalServerError, err
 		}
+
 		return result, http.StatusOK, nil
 	})
 

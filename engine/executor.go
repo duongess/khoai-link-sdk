@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"khoai-link-sdk/client"
@@ -37,89 +38,158 @@ func (e *Executor) RegisterTaskHandler(taskName string, handler types.TaskHandle
 	e.handlers[taskName] = handler
 }
 
-// ExecuteAndDispatch chay node hien tai theo StepID va tim cac Node con tiep theo de dispatch
+// findRootNodes loc ra tat ca cac node khong phu thuoc vao bat ky step nao khac
+func (e *Executor) findRootNodes(plan *core.ExecutionPlan) []core.ExecutionNode {
+	var roots []core.ExecutionNode
+	for _, node := range plan.Nodes {
+		isRoot := true
+		for _, binding := range node.Inputs {
+			if binding.FromStepID != "" {
+				isRoot = false
+				break
+			}
+		}
+		if isRoot {
+			roots = append(roots, node)
+		}
+	}
+	return roots
+}
+
+// ExecuteAndDispatch xu ly ca 2 truong hop: Khoi dong Plan (currentStepID == "") va chay tiep 1 Step cu the
 func (e *Executor) ExecuteAndDispatch(ctx context.Context, reqID string, plan *core.ExecutionPlan, currentStepID string, runtimeOutputs map[string]map[string]any) (any, error) {
 	if plan == nil {
 		return nil, errors.New("execution plan cannot be nil")
 	}
 
-	// 1. Tim ExecutionNode hien tai trong Flat Nodes array
+	if runtimeOutputs == nil {
+		runtimeOutputs = make(map[string]map[string]any)
+	}
+
+	// TRUONG HOP 1: Khoi dong Plan tong tu Gateway (currentStepID rong) -> Tim va chay cac Root Nodes
+	if currentStepID == "" {
+		roots := e.findRootNodes(plan)
+		if len(roots) == 0 {
+			return nil, errors.New("invalid execution plan: no root nodes found (possible circular dependency)")
+		}
+
+		// Neu chi co 1 root node va nam ngay tren Node hien tai -> Chay luon
+		if len(roots) == 1 && roots[0].NodeID == e.nodeID {
+			return e.ExecuteAndDispatch(ctx, reqID, plan, roots[0].StepID, runtimeOutputs)
+		}
+
+		// Neu co nhieu Root Nodes hoac Root Node nam o may khac -> Ban song song (Fan-out)
+		var wg sync.WaitGroup
+		errChan := make(chan error, len(roots))
+
+		for _, root := range roots {
+			wg.Add(1)
+			go func(targetRoot core.ExecutionNode) {
+				defer wg.Done()
+				if targetRoot.NodeID == e.nodeID {
+					_, err := e.ExecuteAndDispatch(ctx, reqID, plan, targetRoot.StepID, runtimeOutputs)
+					if err != nil {
+						errChan <- err
+					}
+				} else {
+					// Root node nam o may khac -> Dispatch P2P sang may do
+					payload := map[string]any{
+						"execution_plan":  plan,
+						"current_step_id": targetRoot.StepID,
+						"runtime_outputs": runtimeOutputs,
+					}
+					_, err := e.p2pClient.ForwardTask(ctx, targetRoot.NodeIP, reqID, payload)
+					if err != nil {
+						errChan <- fmt.Errorf("failed to trigger root node '%s' at %s: %w", targetRoot.StepID, targetRoot.NodeIP, err)
+					}
+				}
+			}(root)
+		}
+
+		wg.Wait()
+		close(errChan)
+
+		if len(errChan) > 0 {
+			var combinedErr error
+			for err := range errChan {
+				combinedErr = errors.Join(combinedErr, err)
+			}
+			return nil, combinedErr
+		}
+		return map[string]string{"status": "plan_started"}, nil
+	}
+
+	// TRUONG HOP 2: Thuc thi Step cu the tren Node hien tai
 	var currentNode *core.ExecutionNode
-	var currentIndex int
 	for i := range plan.Nodes {
 		if plan.Nodes[i].StepID == currentStepID {
 			currentNode = &plan.Nodes[i]
-			currentIndex = i
 			break
 		}
 	}
 	if currentNode == nil {
-		return nil, fmt.Errorf("step_id '%s' not found in execution plan", currentStepID)
+		return nil, fmt.Errorf("step_id '%s' not found in plan", currentStepID)
 	}
 
-	// 2. Kiem tra Timeout quy dinh rieng cua Step hoac dung Timeout cua toan Plan
-	timeout := time.Duration(plan.TimeoutMs) * time.Millisecond
-	if currentNode.TimeoutMs > 0 {
-		timeout = time.Duration(currentNode.TimeoutMs) * time.Millisecond
-	}
-	stepCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	// 3. Resolve InputBindings
+	// 1. Resolve Inputs
 	resolvedInput, err := e.resolver.ResolveInputs(plan.PlanID, currentNode.Inputs, runtimeOutputs)
 	if err != nil {
-		return nil, fmt.Errorf("resolve inputs failed at step '%s': %w", currentStepID, err)
+		return nil, fmt.Errorf("resolve inputs for step '%s' failed: %w", currentStepID, err)
 	}
 
-	// 4. Tim handler va thuc thi
+	// 2. Chay Task Handler cuc bo
 	handler, exists := e.handlers[currentNode.TaskName]
 	if !exists {
-		return nil, fmt.Errorf("handler for task '%s' not registered on node '%s'", currentNode.TaskName, e.nodeID)
+		return nil, fmt.Errorf("handler for task '%s' not found on node '%s'", currentNode.TaskName, e.nodeID)
 	}
 
 	flightKey := fmt.Sprintf("%s:%s", plan.PlanID, currentStepID)
 	outputRaw, err := e.singleFlight.Do(flightKey, func() (any, error) {
-		return handler(stepCtx, resolvedInput)
+		return handler(ctx, resolvedInput)
 	})
 	if err != nil {
 		if currentNode.OnFailure == core.FailFast {
-			return nil, fmt.Errorf("task '%s' failed (fail_fast policy triggered): %w", currentNode.TaskName, err)
+			return nil, fmt.Errorf("task '%s' failed: %w", currentNode.TaskName, err)
 		}
-		// Neu la FailPartial: ghi nhan loi va tiep tuc
 		outputRaw = map[string]any{"error": err.Error(), "partial": true}
 	}
 
-	// 5. Luu ket qua buoc vao BufferStore va Runtime Context
+	// 3. Luu output cua buoc hien tai
 	stepOutput, ok := outputRaw.(map[string]any)
 	if !ok {
 		stepOutput = map[string]any{"result": outputRaw}
 	}
-
-	if runtimeOutputs == nil {
-		runtimeOutputs = make(map[string]map[string]any)
-	}
 	runtimeOutputs[currentStepID] = stepOutput
 	e.store.Set(e.store.MakeKey(plan.PlanID, currentStepID), stepOutput, 10*time.Minute)
 
-	// 6. Kiem tra Node tiep theo trong chuoi Flat DAG (hoac chot ket qua neu la node cuoi)
-	nextIndex := currentIndex + 1
-	if nextIndex >= len(plan.Nodes) || currentNode.MergePolicy == core.MergeNone {
+	// 4. Tim tat ca cac Node con tiep theo can ket qua cua buoc hien tai
+	var nextNodes []core.ExecutionNode
+	for _, n := range plan.Nodes {
+		for _, binding := range n.Inputs {
+			if binding.FromStepID == currentStepID {
+				nextNodes = append(nextNodes, n)
+				break
+			}
+		}
+	}
+
+	// Neu khong con node nao phu thuoc -> Leaf node (Chot ket qua)
+	if len(nextNodes) == 0 {
 		return runtimeOutputs, nil
 	}
 
-	nextNode := plan.Nodes[nextIndex]
-
-	// 7. Chuyen tiep (Dispatch P2P) sang Node tiep theo dung dia chi NodeIP trong Plan
-	forwardPayload := map[string]any{
-		"execution_plan":  plan,
-		"current_step_id": nextNode.StepID,
-		"runtime_outputs": runtimeOutputs,
+	// 5. Chuyen tiep (Dispatch) sang cac node tiep theo
+	for _, nextNode := range nextNodes {
+		payload := map[string]any{
+			"execution_plan":  plan,
+			"current_step_id": nextNode.StepID,
+			"runtime_outputs": runtimeOutputs,
+		}
+		_, err := e.p2pClient.ForwardTask(ctx, nextNode.NodeIP, reqID, payload)
+		if err != nil {
+			return nil, fmt.Errorf("dispatch to step '%s' (%s) failed: %w", nextNode.StepID, nextNode.NodeIP, err)
+		}
 	}
 
-	resp, err := e.p2pClient.ForwardTask(ctx, nextNode.NodeIP, reqID, forwardPayload)
-	if err != nil {
-		return nil, fmt.Errorf("forwarding to next node '%s' (%s) failed: %w", nextNode.NodeID, nextNode.NodeIP, err)
-	}
-
-	return resp.Result, nil
+	return runtimeOutputs, nil
 }
