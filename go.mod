@@ -1,4 +1,4 @@
-module khoai-link-skd
+module khoai-link-sdk
 
 go 1.26.7
 

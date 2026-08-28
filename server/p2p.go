@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"khoai-link-sdk/engine"
 	"net/http"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ type P2pNode struct {
 	Addr          string
 	MCPGatewayURL string
 	Peers         map[string]string
+	Engine        *engine.Executor
 	mu            sync.RWMutex
 	httpServer    *http.Server
 }
