@@ -1,0 +1,31 @@
+{
+  "node_id": "node-qc-station-01",
+  "mcp_gateway_url": "http://192.168.1.10:9090",
+  "tasks": [
+    {
+      "name": "inspect_lot_quality",
+      "description": "Kiem tra ty le loi va chat luong san pham theo lo",
+      "intent": "check_quality",
+      "domain": "quality",
+      "input_schema": {
+        "lot_id": {
+          "type": "string",
+          "required": true,
+          "semantic_type": "production.lot.id",
+          "description": "Ma lo san xuat can kiem tra"
+        }
+      },
+      "output_schema": {
+        "defect_rate": {
+          "type": "number",
+          "semantic_type": "quality.defect.rate",
+          "description": "Ty le loi phat hien tren mau"
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "hardware_type": "jetson_nano",
+    "location": "line_02"
+  }
+}
