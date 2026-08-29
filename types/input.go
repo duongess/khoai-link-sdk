@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"fmt"
 
 	"khoai-link-sdk/utils"
@@ -13,7 +14,7 @@ type TaskInput map[string]any
 type TaskOutput map[string]any
 
 // TaskHandler la signature ham xu ly nghiep vu ma lap trinh vien viet
-type TaskHandler func(ctx any, in TaskInput) (TaskOutput, error)
+type TaskHandler func(ctx context.Context, in TaskInput) (TaskOutput, error)
 
 // --- Cac ham Helper giup get data an toan (Safe Casting) ---
 
