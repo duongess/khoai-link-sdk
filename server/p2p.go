@@ -9,7 +9,7 @@ import (
 
 	"github.com/duongess/khoai-link-sdk/engine"
 
-	"github.com/khoai-link-protocol/core"
+	"github.com/duongess/khoai-link-protocol/core"
 )
 
 type P2pNode struct {

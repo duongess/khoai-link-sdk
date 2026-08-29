@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/khoai-link-protocol/core"
+	"github.com/duongess/khoai-link-protocol/core"
 )
 
 type P2pClient struct {

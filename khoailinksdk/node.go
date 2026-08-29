@@ -14,7 +14,7 @@ import (
 	"github.com/duongess/khoai-link-sdk/server"
 	"github.com/duongess/khoai-link-sdk/types"
 
-	"github.com/khoai-link-protocol/core"
+	"github.com/duongess/khoai-link-protocol/core"
 )
 
 type SDKNode struct {

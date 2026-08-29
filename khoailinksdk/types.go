@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/khoai-link-protocol/core"
+	"github.com/duongess/khoai-link-protocol/core"
 )
 
 // Config chứa toàn bộ thông số cấu hình của một Node

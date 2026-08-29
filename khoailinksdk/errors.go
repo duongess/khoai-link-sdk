@@ -1,7 +1,7 @@
 package khoailinksdk
 
 import (
-	"github.com/khoai-link-protocol/core"
+	"github.com/duongess/khoai-link-protocol/core"
 )
 
 // Su dung truc tiep tu protocol de dam bao tinh nhat quan tren toan mang

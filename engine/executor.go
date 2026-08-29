@@ -10,7 +10,7 @@ import (
 	"github.com/duongess/khoai-link-sdk/client"
 	"github.com/duongess/khoai-link-sdk/types"
 
-	"github.com/khoai-link-protocol/core"
+	"github.com/duongess/khoai-link-protocol/core"
 )
 
 type Executor struct {
