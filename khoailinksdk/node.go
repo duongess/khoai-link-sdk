@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"khoai-link-sdk/client"
-	"khoai-link-sdk/engine"
-	"khoai-link-sdk/server"
-	"khoai-link-sdk/types"
+	"github.com/duongess/khoai-link-sdk/client"
+	"github.com/duongess/khoai-link-sdk/engine"
+	"github.com/duongess/khoai-link-sdk/server"
+	"github.com/duongess/khoai-link-sdk/types"
 
 	"github.com/khoai-link-protocol/core"
 )

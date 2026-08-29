@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
-	"khoai-link-sdk/khoailinksdk"
-	"khoai-link-sdk/types"
 	"log"
+
+	"github.com/duongess/khoai-link-sdk/khoailinksdk"
+	"github.com/duongess/khoai-link-sdk/types"
 )
 
 func main() {

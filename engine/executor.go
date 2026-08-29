@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"khoai-link-sdk/client"
-	"khoai-link-sdk/types"
+	"github.com/duongess/khoai-link-sdk/client"
+	"github.com/duongess/khoai-link-sdk/types"
 
 	"github.com/khoai-link-protocol/core"
 )

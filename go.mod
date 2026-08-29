@@ -1,4 +1,4 @@
-module khoai-link-sdk
+module github.com/duongess/khoai-link-sdk
 
 go 1.26.7
 
